@@ -1,4 +1,4 @@
-module Run where
+module Lib where
 
 import Config
 import Control.Exception
