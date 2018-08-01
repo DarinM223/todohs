@@ -25,11 +25,13 @@ dependencies:
 - beam-core
 - beam-migrate
 - beam-postgres
+- mtl
 - postgresql-simple
 - resource-pool
 - servant
 - servant-server
 - text
+- warp
 
 default-extensions:
 - BangPatterns
