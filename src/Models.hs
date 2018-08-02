@@ -1,7 +1,9 @@
 module Models where
 
+import Data.Aeson (ToJSON)
 import Data.Text (Text)
 import Database.Beam
+import Servant.Auth.Server (ToJWT)
 
 data UserT f = User
     { _userId       :: Columnar f Int
@@ -10,6 +12,8 @@ data UserT f = User
     } deriving Generic
 type User = UserT Identity
 deriving instance Show User
+instance ToJSON User
+instance ToJWT User
 
 instance Table UserT where
     data PrimaryKey UserT f = UserId (Columnar f Int)

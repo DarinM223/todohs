@@ -29,6 +29,8 @@ dependencies:
 - postgresql-simple
 - resource-pool
 - servant
+- servant-auth
+- servant-auth-server
 - servant-server
 - text
 - warp
