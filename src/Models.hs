@@ -1,9 +1,9 @@
 module Models where
 
-import Data.Aeson (ToJSON)
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Text (Text)
 import Database.Beam
-import Servant.Auth.Server (ToJWT)
+import Servant.Auth.Server (FromJWT, ToJWT)
 
 data UserT f = User
     { _userId       :: Columnar f Int
@@ -12,8 +12,8 @@ data UserT f = User
     } deriving Generic
 type User = UserT Identity
 deriving instance Show User
-instance ToJSON User
-instance ToJWT User
+instance FromJSON User ; instance ToJSON User
+instance FromJWT User ; instance ToJWT User
 
 instance Table UserT where
     data PrimaryKey UserT f = UserId (Columnar f Int)
@@ -22,6 +22,7 @@ instance Table UserT where
 
 type UserId = PrimaryKey UserT Identity
 deriving instance Show UserId
+instance ToJSON UserId
 
 instance Beamable UserT
 instance Beamable (PrimaryKey UserT)
@@ -33,6 +34,8 @@ data TodoListT f = TodoList
     } deriving Generic
 type TodoList = TodoListT Identity
 deriving instance Show TodoList
+instance ToJSON TodoList
+instance ToJWT TodoList
 
 instance Table TodoListT where
     data PrimaryKey TodoListT f = TodoListId (Columnar f Int)
