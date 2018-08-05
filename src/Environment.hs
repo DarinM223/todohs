@@ -1,4 +1,8 @@
-module Environment where
+module Environment
+    ( Environment (..)
+    , lookupEnv
+    , lookupSetting
+    ) where
 
 import System.Environment (lookupEnv)
 import Text.Read (readMaybe)

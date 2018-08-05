@@ -24,7 +24,9 @@ dependencies:
 - aeson
 - beam-core
 - beam-migrate
+- beam-sqlite
 - beam-postgres
+- bytestring
 - mtl
 - postgresql-simple
 - resource-pool
@@ -32,6 +34,7 @@ dependencies:
 - servant-auth
 - servant-auth-server
 - servant-server
+- sqlite-simple
 - text
 - warp
 

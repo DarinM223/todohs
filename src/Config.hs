@@ -1,8 +1,8 @@
 module Config where
 
+import Data.Pool
 import Environment
-import Pool
-import Servant (Context (EmptyContext, (:.)))
+import Servant (Context (EmptyContext, (:.)), Handler)
 import Servant.Auth.Server
     ( CookieSettings
     , JWTSettings
@@ -14,20 +14,21 @@ import Servant.Auth.Server
 newtype Port = Port { unPort :: Int }
     deriving (Show, Eq, Num, Read)
 
-data Config = Config
+type RunFn conn m = (forall a. m a -> Config conn -> Handler a)
+
+data Config conn = Config
     { _port    :: Port
     , _env     :: Environment
-    , _pool    :: DBPool
+    , _pool    :: Pool conn
     , _jwt     :: JWTSettings
     , _cookie  :: CookieSettings
     , _context :: Context [CookieSettings, JWTSettings]
     }
 
-mkConfig :: IO Config
-mkConfig = do
+mkConfig :: Environment -> IO (Pool conn) -> IO (Config conn)
+mkConfig env mkPool = do
+    pool <- mkPool
     port <- lookupSetting "PORT" 8081
-    env <- lookupSetting "ENV" Development
-    pool <- mkPool env
     key <- generateKey
     let jwtSettings    = defaultJWTSettings key
         cookieSettings = defaultCookieSettings
@@ -37,7 +38,8 @@ mkConfig = do
                   , _pool    = pool
                   , _jwt     = jwtSettings
                   , _cookie  = cookieSettings
-                  , _context = context }
+                  , _context = context
+                  }
 
-freeConfig :: Config -> IO ()
-freeConfig = freePool . _pool
+freeConfig :: Config conn -> IO ()
+freeConfig = destroyAllResources . _pool
