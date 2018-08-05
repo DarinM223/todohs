@@ -14,32 +14,36 @@ import Servant.Auth.Server
 newtype Port = Port { unPort :: Int }
     deriving (Show, Eq, Num, Read)
 
-type RunFn conn m = (forall a. m a -> Config conn -> Handler a)
+type RunFn conn m = (forall a. m a -> Config conn m -> Handler a)
+type RunHandler conn m = (forall a. m a -> Handler a)
 
-data Config conn = Config
-    { _port    :: Port
-    , _env     :: Environment
-    , _pool    :: Pool conn
-    , _jwt     :: JWTSettings
-    , _cookie  :: CookieSettings
-    , _context :: Context [CookieSettings, JWTSettings]
+data Config conn m = Config
+    { _port       :: Port
+    , _env        :: Environment
+    , _pool       :: Pool conn
+    , _jwt        :: JWTSettings
+    , _cookie     :: CookieSettings
+    , _context    :: Context [CookieSettings, JWTSettings]
+    , _runHandler :: RunHandler conn m
     }
 
-mkConfig :: Environment -> IO (Pool conn) -> IO (Config conn)
-mkConfig env mkPool = do
+mkConfig :: Environment -> IO (Pool conn) -> RunFn conn m -> IO (Config conn m)
+mkConfig env mkPool fn = do
     pool <- mkPool
     port <- lookupSetting "PORT" 8081
     key <- generateKey
     let jwtSettings    = defaultJWTSettings key
         cookieSettings = defaultCookieSettings
         context        = cookieSettings :. jwtSettings :. EmptyContext
-    return Config { _port    = port
-                  , _env     = env
-                  , _pool    = pool
-                  , _jwt     = jwtSettings
-                  , _cookie  = cookieSettings
-                  , _context = context
-                  }
+    let config = Config { _port       = port
+                        , _env        = env
+                        , _pool       = pool
+                        , _jwt        = jwtSettings
+                        , _cookie     = cookieSettings
+                        , _context    = context
+                        , _runHandler = flip fn config
+                        }
+    return config
 
-freeConfig :: Config conn -> IO ()
+freeConfig :: Config conn m -> IO ()
 freeConfig = destroyAllResources . _pool

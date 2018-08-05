@@ -16,13 +16,13 @@ runApp = do
     env <- lookupSetting "ENV" Development
     case env of
         Production ->
-            bracket (mkConfig env (mkPoolPg env)) freeConfig (runApp runProdT)
+            bracket (mkConfig env (mkPoolPg env) runProdT) freeConfig runApp
         _ ->
-            bracket (mkConfig env (mkPoolSq env)) freeConfig (runApp runDevT)
+            bracket (mkConfig env (mkPoolSq env) runDevT) freeConfig runApp
   where
-    app :: RunFn conn m -> Config conn -> Application
-    app run config =
-        serveWithContext cookieApi (_context config) (server run config)
+    app :: Config conn m -> Application
+    app config =
+        serveWithContext cookieApi (_context config) (server config)
 
-    runApp :: RunFn conn m -> Config conn -> IO ()
-    runApp fn config = void $ Warp.run (unPort $ _port config) (app fn config)
+    runApp :: Config conn m -> IO ()
+    runApp config = void $ Warp.run (unPort $ _port config) (app config)

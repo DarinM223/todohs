@@ -1,6 +1,6 @@
 module Server where
 
-import Config (Config (_cookie, _jwt), RunFn)
+import Config (Config (_cookie, _jwt, _runHandler))
 import Control.Monad.Except
 import Data.Aeson (FromJSON)
 import Data.Text (Text)
@@ -19,12 +19,12 @@ type Protected = "users" :> UsersAPI
 type UsersAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe User)
 type TodoListAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe TodoList)
 
-protected :: Config conn -> RunFn conn m -> AuthResult User -> Server Protected
-protected config run (Authenticated _) =
-    hoistServer (Proxy :: Proxy Protected) (flip run config) server
+protected :: Config conn m -> AuthResult User -> Server Protected
+protected config (Authenticated _) =
+    hoistServer (Proxy :: Proxy Protected) (_runHandler config) server
   where
     server = undefined
-protected _ _ _ = throwAll err401
+protected _ _ = throwAll err401
 
 type Unprotected
     = "login" :> ReqBody '[JSON] Login
@@ -34,12 +34,12 @@ type Unprotected
                                                  NoContent)
  :<|> Raw
 
-unprotected :: Config conn -> Server Unprotected
+unprotected :: Config conn m -> Server Unprotected
 unprotected config = checkCreds config :<|> serveDirectoryFileServer "/static"
 
 type API auths = (Auth auths User :> Protected) :<|> Unprotected
 
-checkCreds :: Config conn
+checkCreds :: Config conn m
            -> Login
            -> Handler (Headers '[ Header "Set-Cookie" SetCookie
                                 , Header "Set-Cookie" SetCookie
@@ -59,5 +59,5 @@ jwtApi = Proxy
 cookieApi :: Proxy (API '[Cookie])
 cookieApi = Proxy
 
-server :: RunFn conn m -> Config conn -> Server (API auths)
-server run config = protected config run :<|> unprotected config
+server :: Config conn m -> Server (API auths)
+server config = protected config :<|> unprotected config
