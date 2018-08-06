@@ -6,8 +6,11 @@ import Data.Aeson (FromJSON)
 import Data.Text (Text)
 import GHC.Generics
 import Models (TodoList, User, UserT (User))
+import Monad (Constr)
 import Servant
 import Servant.Auth.Server
+
+import qualified DB as DB
 
 data Login = Login { _username :: Text, _password :: Text }
     deriving (Eq, Show, Read, Generic)
@@ -19,11 +22,16 @@ type Protected = "users" :> UsersAPI
 type UsersAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe User)
 type TodoListAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe TodoList)
 
-protected :: Config conn m -> AuthResult User -> Server Protected
+protected :: (Constr conn m)
+          => Config conn m
+          -> AuthResult User
+          -> Server Protected
 protected config (Authenticated _) =
     hoistServer (Proxy :: Proxy Protected) (_runHandler config) server
   where
-    server = undefined
+    userServer = DB.getUser
+    listServer = DB.getList
+    server = userServer :<|> listServer
 protected _ _ = throwAll err401
 
 type Unprotected
@@ -59,5 +67,5 @@ jwtApi = Proxy
 cookieApi :: Proxy (API '[Cookie])
 cookieApi = Proxy
 
-server :: Config conn m -> Server (API auths)
+server :: (Constr conn m) => Config conn m -> Server (API auths)
 server config = protected config :<|> unprotected config

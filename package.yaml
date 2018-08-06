@@ -27,6 +27,7 @@ dependencies:
 - beam-sqlite
 - beam-postgres
 - bytestring
+- deriving-compat
 - mtl
 - postgresql-simple
 - resource-pool

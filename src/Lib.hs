@@ -20,9 +20,9 @@ runApp = do
         _ ->
             bracket (mkConfig env (mkPoolSq env) runDevT) freeConfig runApp
   where
-    app :: Config conn m -> Application
+    app :: (Constr conn m) => Config conn m -> Application
     app config =
         serveWithContext cookieApi (_context config) (server config)
 
-    runApp :: Config conn m -> IO ()
+    runApp :: (Constr conn m) => Config conn m -> IO ()
     runApp config = void $ Warp.run (unPort $ _port config) (app config)
