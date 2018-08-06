@@ -22,7 +22,7 @@ runApp = do
   where
     app :: (Constr conn m) => Config conn m -> Application
     app config =
-        serveWithContext cookieApi (_context config) (server config)
+        serveWithContext jwtApi (_context config) (server config)
 
     runApp :: (Constr conn m) => Config conn m -> IO ()
     runApp config = void $ Warp.run (unPort $ _port config) (app config)
