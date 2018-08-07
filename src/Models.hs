@@ -74,10 +74,3 @@ data TodoListDb f = TodoListDb
     } deriving Generic
 
 instance Database be TodoListDb
-
-todoListDb :: DatabaseSettings be TodoListDb
-todoListDb = defaultDbSettings `withDbModification` dbModification
-    { _todoListUsers = modifyTable (const "users") tableModification
-    , _todoLists     = modifyTable (const "lists") tableModification
-    , _todos         = modifyTable (const "todos") tableModification
-    }

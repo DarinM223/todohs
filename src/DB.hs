@@ -8,6 +8,7 @@ import Database.Beam
 import Database.Beam.Postgres (Pg)
 import Database.Beam.Sqlite (SqliteM)
 import Models
+import Migrations
 import Pool
 
 import qualified Database.PostgreSQL.Simple as P

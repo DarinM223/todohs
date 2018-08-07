@@ -4,9 +4,15 @@ import Data.List (intercalate)
 import Data.Maybe (catMaybes)
 import Data.Pool
 import Database.Beam
+import Database.Beam.Migrate.Simple (runSimpleMigration, simpleMigration)
+import Database.Beam.Postgres
+import Database.Beam.Sqlite
 import Environment
+import Migrations
 
 import qualified Data.ByteString.Char8 as C
+import qualified Database.Beam.Sqlite.Migrate as SM
+import qualified Database.Beam.Postgres.Migrate as PM
 import qualified Database.PostgreSQL.Simple as P
 import qualified Database.SQLite.Simple as S
 
@@ -18,7 +24,16 @@ numPools :: Environment -> Int
 numPools _ = 10
 
 mkPoolPg :: Environment -> IO (Pool P.Connection)
-mkPoolPg env = createPool (connect env) P.close (numPools env) 1 2
+mkPoolPg env = do
+    pool <- createPool (connect env) P.close (numPools env) 1 2
+    withResource pool $ \conn ->
+        simpleMigration PM.migrationBackend conn todoListCheckedDb >>= \case
+            Nothing       -> fail "Something went wrong constructing migration"
+            Just []       -> putStrLn "Already up to date"
+            Just commands -> runSimpleMigration @PgCommandSyntax
+                                                @Postgres @_ @Pg
+                                                conn commands
+    return pool
   where
     connect Test = P.connectPostgreSQL "host=localhost dbname=todohs_test"
     connect Development =
@@ -43,7 +58,16 @@ mkPoolPg env = createPool (connect env) P.close (numPools env) 1 2
         toEnvString _                 = Nothing
 
 mkPoolSq :: Environment -> IO (Pool S.Connection)
-mkPoolSq env = createPool (S.open (filename env)) S.close (numPools env) 1 2
+mkPoolSq env = do
+    pool <- createPool (S.open (filename env)) S.close (numPools env) 1 2
+    withResource pool $ \conn ->
+        simpleMigration SM.migrationBackend conn todoListCheckedDb >>= \case
+            Nothing       -> fail "Something went wrong constructing migration"
+            Just []       -> putStrLn "Already up to date"
+            Just commands -> runSimpleMigration @SqliteCommandSyntax
+                                                @Sqlite @_ @SqliteM
+                                                conn commands
+    return pool
   where
     filename Test        = "test.db"
     filename Development = "dev.db"
