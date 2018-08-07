@@ -27,12 +27,10 @@ mkPoolPg :: Environment -> IO (Pool P.Connection)
 mkPoolPg env = do
     pool <- createPool (connect env) P.close (numPools env) 1 2
     withResource pool $ \conn ->
-        simpleMigration PM.migrationBackend conn todoListCheckedDb >>= \case
-            Nothing       -> fail "Something went wrong constructing migration"
-            Just []       -> putStrLn "Already up to date"
-            Just commands -> runSimpleMigration @PgCommandSyntax
-                                                @Postgres @_ @Pg
-                                                conn commands
+        simpleMigration PM.migrationBackend conn pgCheckedDb >>=
+            handleMigrations (runSimpleMigration @PgCommandSyntax
+                                                 @Postgres @_ @Pg
+                                                 conn)
     return pool
   where
     connect Test = P.connectPostgreSQL "host=localhost dbname=todohs_test"
@@ -61,17 +59,21 @@ mkPoolSq :: Environment -> IO (Pool S.Connection)
 mkPoolSq env = do
     pool <- createPool (S.open (filename env)) S.close (numPools env) 1 2
     withResource pool $ \conn ->
-        simpleMigration SM.migrationBackend conn todoListCheckedDb >>= \case
-            Nothing       -> fail "Something went wrong constructing migration"
-            Just []       -> putStrLn "Already up to date"
-            Just commands -> runSimpleMigration @SqliteCommandSyntax
-                                                @Sqlite @_ @SqliteM
-                                                conn commands
+        simpleMigration SM.migrationBackend conn sqCheckedDb >>=
+            handleMigrations (runSimpleMigration @SqliteCommandSyntax
+                                                 @Sqlite @_ @SqliteM
+                                                 conn)
     return pool
   where
     filename Test        = "test.db"
     filename Development = "dev.db"
     filename Production  = error "Sqlite should not be for production"
+
+handleMigrations :: ([command] -> IO ()) -> Maybe [command] -> IO ()
+handleMigrations fn = \case
+    Nothing       -> fail "Something went wrong constructing migration"
+    Just []       -> putStrLn "Already up to date"
+    Just commands -> fn commands
 
 freePool :: Pool a -> IO ()
 freePool = destroyAllResources

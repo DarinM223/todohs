@@ -20,40 +20,38 @@ class (Monad m) => MonadUsers m where
 class (Monad m) => MonadTodoLists m where
     getList :: Int -> m (Maybe TodoList)
 
-getUserDB id
+getUserDB db id
     = runSelectReturningOne
     $ select
     $ filter_ (\user -> _userId user ==. val_ id)
-    $ all_ (_todoListUsers todoListDb)
+    $ all_ (_todoListUsers db)
 
-getListDB id
+getListDB db id
     = runSelectReturningOne
     $ select
     $ filter_ (\list -> _todoListId list ==. val_ id)
-    $ all_ (_todoLists todoListDb)
+    $ all_ (_todoLists db)
 
 newtype MonadDBPostgres m a = MonadDBPostgres (m a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
-instance (MonadIO m, MonadReader c m, HasPool P.Connection c)
-    => MonadUsers (MonadDBPostgres m) where
-    getUser id = asks getPool >>=
-        liftIO . flip runPool (getUserDB id :: Pg (Maybe User))
+type PgConstr c m = (MonadIO m, MonadReader c m, HasPool P.Connection c)
 
-instance (MonadIO m, MonadReader c m, HasPool P.Connection c)
-    => MonadTodoLists (MonadDBPostgres m) where
+instance (PgConstr c m) => MonadUsers (MonadDBPostgres m) where
+    getUser id = asks getPool >>=
+        liftIO . flip runPool (getUserDB pgDb id :: Pg (Maybe User))
+instance (PgConstr c m) => MonadTodoLists (MonadDBPostgres m) where
     getList id = asks getPool >>=
-        liftIO . flip runPool (getListDB id :: Pg (Maybe TodoList))
+        liftIO . flip runPool (getListDB pgDb id :: Pg (Maybe TodoList))
 
 newtype MonadDBSqlite m a = MonadDBSqlite (m a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
-instance (MonadIO m, MonadReader c m, HasPool S.Connection c)
-    => MonadUsers (MonadDBSqlite m) where
-    getUser id = asks getPool >>=
-        liftIO . flip runPool (getUserDB id :: SqliteM (Maybe User))
+type SqConstr c m = (MonadIO m, MonadReader c m, HasPool S.Connection c)
 
-instance (MonadIO m, MonadReader c m, HasPool S.Connection c)
-    => MonadTodoLists (MonadDBSqlite m) where
+instance (SqConstr c m) => MonadUsers (MonadDBSqlite m) where
+    getUser id = asks getPool >>=
+        liftIO . flip runPool (getUserDB sqDb id :: SqliteM (Maybe User))
+instance (SqConstr c m) => MonadTodoLists (MonadDBSqlite m) where
     getList id = asks getPool >>=
-        liftIO . flip runPool (getListDB id :: SqliteM (Maybe TodoList))
+        liftIO . flip runPool (getListDB sqDb id :: SqliteM (Maybe TodoList))

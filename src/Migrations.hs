@@ -2,6 +2,7 @@ module Migrations where
 
 import Database.Beam
 import Database.Beam.Migrate
+import Database.Beam.Postgres
 import Database.Beam.Sqlite
 import Models
 
@@ -37,11 +38,24 @@ migration = do
 
 type Migration' syntax be db = Migration syntax (CheckedDatabaseSettings be db)
 
-migrations :: MigrationSteps SqliteCommandSyntax () (CheckedDatabaseSettings be TodoListDb)
-migrations = migrationStep "Initial commit" (const migration)
+migrationsSq :: MigrationSteps SqliteCommandSyntax
+                               ()
+                               (CheckedDatabaseSettings be TodoListDb)
+migrationsSq = migrationStep "Initial commit" (const migration)
 
-todoListCheckedDb :: CheckedDatabaseSettings be TodoListDb
-todoListCheckedDb = evaluateDatabase migrations
+migrationsPg :: MigrationSteps PgCommandSyntax
+                               ()
+                               (CheckedDatabaseSettings be TodoListDb)
+migrationsPg = migrationStep "Initial commit" (const migration)
 
-todoListDb :: DatabaseSettings be TodoListDb
-todoListDb = unCheckDatabase todoListCheckedDb
+pgCheckedDb :: CheckedDatabaseSettings be TodoListDb
+pgCheckedDb = evaluateDatabase migrationsPg
+
+sqCheckedDb :: CheckedDatabaseSettings be TodoListDb
+sqCheckedDb = evaluateDatabase migrationsSq
+
+pgDb :: DatabaseSettings be TodoListDb
+pgDb = unCheckDatabase pgCheckedDb
+
+sqDb :: DatabaseSettings be TodoListDb
+sqDb = unCheckDatabase sqCheckedDb
