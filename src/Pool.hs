@@ -1,14 +1,20 @@
 module Pool where
 
+import Control.Monad (void)
+import Control.Monad.Trans
+import Control.Monad.Trans.Maybe
+import Crypto.BCrypt
 import Data.List (intercalate)
 import Data.Maybe (catMaybes)
 import Data.Pool
+import Data.Text.Encoding (decodeUtf8)
 import Database.Beam
 import Database.Beam.Migrate.Simple (runSimpleMigration, simpleMigration)
 import Database.Beam.Postgres
 import Database.Beam.Sqlite
 import Environment
 import Migrations
+import Models
 
 import qualified Data.ByteString.Char8 as C
 import qualified Database.Beam.Sqlite.Migrate as SM
@@ -63,8 +69,23 @@ mkPoolSq env = do
             handleMigrations (runSimpleMigration @SqliteCommandSyntax
                                                  @Sqlite @_ @SqliteM
                                                  conn)
+    -- TODO(DarinM223): remove this once registration is implemented.
+    runPool pool insertOchako
     return pool
   where
+    insertOchako :: SqliteM ()
+    insertOchako = void $ runMaybeT $ do
+        pass <- liftIO (hashedPass "deku") >>= MaybeT . pure
+        lift $ runInsert $ insert (_todoListUsers sqDb)
+                         $ insertValues [ochako pass]
+      where
+        hashedPass pass =
+            hashPasswordUsingPolicy slowerBcryptHashingPolicy pass >>=
+                return . fmap decodeUtf8
+        ochako pass = User { _userId       = 0
+                           , _userEmail    = "uravity@gmail.com"
+                           , _userPassword = pass
+                           }
     filename Test        = "test.db"
     filename Development = "dev.db"
     filename Production  = error "Sqlite should not be for production"

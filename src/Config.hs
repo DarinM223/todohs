@@ -15,7 +15,7 @@ newtype Port = Port { unPort :: Int }
     deriving (Show, Eq, Num, Read)
 
 type RunFn conn m = forall a. m a -> Config conn m -> Handler a
-type RunHandler conn m = forall a. m a -> Handler a
+type RunHandler m = forall a. m a -> Handler a
 
 class HasPool conn c | c -> conn where
     getPool :: c -> Pool conn
@@ -27,7 +27,7 @@ data Config conn m = Config
     , _jwt        :: JWTSettings
     , _cookie     :: CookieSettings
     , _context    :: Context [CookieSettings, JWTSettings]
-    , _runHandler :: RunHandler conn m
+    , _runHandler :: RunHandler m
     }
 
 instance HasPool conn (Config conn m) where

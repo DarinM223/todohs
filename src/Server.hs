@@ -2,24 +2,27 @@ module Server where
 
 import Config (Config (_cookie, _jwt, _runHandler))
 import Control.Monad.Except
+import Control.Monad.Trans.Maybe
+import Crypto.BCrypt
 import Data.Aeson (FromJSON)
 import Data.Text (Text)
+import Data.Text.Encoding (encodeUtf8)
 import GHC.Generics
-import Models (TodoList, User, UserT (User))
+import Models (TodoList, User, UserT (_userPassword))
 import Monad (Constr)
 import Servant
 import Servant.Auth.Server
 
 import qualified DB as DB
 
-data Login = Login { _username :: Text, _password :: Text }
+data Login = Login { _email :: Text, _password :: Text }
     deriving (Eq, Show, Read, Generic)
 instance FromJSON Login
 
 type Protected = "users" :> UsersAPI
             :<|> "lists" :> TodoListAPI
 
-type UsersAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe User)
+type UsersAPI = "get" :> Capture "email" Text :> Get '[JSON] (Maybe User)
 type TodoListAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe TodoList)
 
 protected :: (Constr conn m)
@@ -29,7 +32,7 @@ protected :: (Constr conn m)
 protected config (Authenticated _) =
     hoistServer (Proxy :: Proxy Protected) (_runHandler config) server
   where
-    userServer = DB.getUser
+    userServer = DB.lookupByEmail
     listServer = DB.getList
     server = userServer :<|> listServer
 protected _ _ = throwAll err401
@@ -42,24 +45,32 @@ type Unprotected
                                                  NoContent)
  :<|> Raw
 
-unprotected :: Config conn m -> Server Unprotected
+unprotected :: (Constr conn m) => Config conn m -> Server Unprotected
 unprotected config = checkCreds config :<|> serveDirectoryFileServer "/static"
 
 type API auths = (Auth auths User :> Protected) :<|> Unprotected
 
-checkCreds :: Config conn m
+checkCreds :: (Constr conn m)
+           => Config conn m
            -> Login
            -> Handler (Headers '[ Header "Set-Cookie" SetCookie
                                 , Header "Set-Cookie" SetCookie
                                 ]
                                 NoContent)
-checkCreds cfg (Login "Ochako Uraraka" "Deku") = do
-    -- TODO(DarinM223): lookup in database instead
-    let usr = User 0 "Ochako Uraraka" "uravity@gmail.com" :: User
-    liftIO (acceptLogin (_cookie cfg) (_jwt cfg) usr) >>= \case
-        Nothing           -> throwError err401
-        Just applyCookies -> return $ applyCookies NoContent
-checkCreds _ _ = throwError err401
+checkCreds cfg (Login email password) =
+    maybe (throwError err401) return =<< checkCreds
+  where
+    lookupEmail cfg = _runHandler cfg . DB.lookupByEmail
+    checkLogin cfg = liftIO . acceptLogin (_cookie cfg) (_jwt cfg)
+    validateUser user password = validatePassword
+        (encodeUtf8 $ _userPassword user)
+        (encodeUtf8 password)
+    checkCreds = runMaybeT $ do
+        user <- lift (lookupEmail cfg email) >>= MaybeT . pure
+        guard (validateUser user password)
+        lift (checkLogin cfg user) >>= lift . \case
+            Nothing           -> throwError err401
+            Just applyCookies -> return $ applyCookies NoContent
 
 jwtApi :: Proxy (API '[JWT])
 jwtApi = Proxy
