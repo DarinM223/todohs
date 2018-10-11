@@ -4,25 +4,29 @@ import Config (Config (_cookie, _jwt, _runHandler))
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
 import Crypto.BCrypt
-import Data.Aeson (FromJSON)
-import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
-import GHC.Generics
 import Models (TodoList, User, UserT (_userPassword))
 import Monad (Constr)
 import Servant
 import Servant.Auth.Server
+import Types (Login (..), PublicUser)
 
 import qualified DB as DB
-
-data Login = Login { _email :: Text, _password :: Text }
-    deriving (Eq, Show, Read, Generic)
-instance FromJSON Login
 
 type Protected = "users" :> UsersAPI
             :<|> "lists" :> TodoListAPI
 
-type UsersAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe DB.PublicUser)
+type Unprotected
+    = "login" :> ReqBody '[JSON] Login
+              :> PostNoContent '[JSON] (Headers '[ Header "Set-Cookie" SetCookie
+                                                 , Header "Set-Cookie" SetCookie
+                                                 ]
+                                                 NoContent)
+ :<|> Raw
+
+type API auths = (Auth auths User :> Protected) :<|> Unprotected
+
+type UsersAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe PublicUser)
 type TodoListAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe TodoList)
 
 protected :: (Constr conn m)
@@ -37,18 +41,8 @@ protected config (Authenticated _) =
     server = usersApi :<|> listsApi
 protected _ _ = throwAll err401
 
-type Unprotected
-    = "login" :> ReqBody '[JSON] Login
-              :> PostNoContent '[JSON] (Headers '[ Header "Set-Cookie" SetCookie
-                                                 , Header "Set-Cookie" SetCookie
-                                                 ]
-                                                 NoContent)
- :<|> Raw
-
 unprotected :: (Constr conn m) => Config conn m -> Server Unprotected
 unprotected config = checkCreds config :<|> serveDirectoryFileServer "/static"
-
-type API auths = (Auth auths User :> Protected) :<|> Unprotected
 
 checkCreds :: (Constr conn m)
            => Config conn m
@@ -72,11 +66,11 @@ checkCreds cfg (Login email password) =
             Nothing           -> throwError err401
             Just applyCookies -> return $ applyCookies NoContent
 
+server :: (Constr conn m) => Config conn m -> Server (API auths)
+server config = protected config :<|> unprotected config
+
 jwtApi :: Proxy (API '[JWT])
 jwtApi = Proxy
 
 cookieApi :: Proxy (API '[Cookie])
 cookieApi = Proxy
-
-server :: (Constr conn m) => Config conn m -> Server (API auths)
-server config = protected config :<|> unprotected config
