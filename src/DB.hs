@@ -4,6 +4,7 @@ module DB where
 
 import Config (HasPool (..))
 import Control.Monad.Reader
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Text (Text)
 import Database.Beam
 import Database.Beam.Postgres (Pg)
@@ -11,23 +12,50 @@ import Database.Beam.Sqlite (SqliteM)
 import Models
 import Migrations
 import Pool
+import Servant.Auth.Server (FromJWT, ToJWT)
 
 import qualified Database.PostgreSQL.Simple as P
 import qualified Database.SQLite.Simple as S
 
+data PublicUser = PublicUser
+    { _id    :: Int
+    , _email :: Text
+    } deriving (Show, Eq, Generic)
+instance FromJSON PublicUser ; instance ToJSON PublicUser
+instance FromJWT PublicUser ; instance ToJWT PublicUser
+
+fromUser :: User -> PublicUser
+fromUser user = PublicUser
+    { _id    = _userId user
+    , _email = _userEmail user
+    }
+
 class (Monad m) => MonadUsers m where
+    -- | Looks up user by email.
+    --
+    -- Only to be used for authentication, since it returns a user with the
+    -- hashed password.
     lookupByEmail :: Text -> m (Maybe User)
+
+    -- | Looks up user by id.
+    lookupByID :: Int -> m (Maybe PublicUser)
 
 class (Monad m) => MonadTodoLists m where
     getList :: Int -> m (Maybe TodoList)
 
-lookupByEmailDB db email
+lookupByEmail' db email
     = runSelectReturningOne
     $ select
     $ filter_ (\user -> _userEmail user ==. val_ email)
     $ all_ (_todoListUsers db)
 
-getListDB db id
+lookupByID' db id
+    = runSelectReturningOne
+    $ select
+    $ filter_ (\user -> _userId user ==. val_ id)
+    $ all_ (_todoListUsers db)
+
+getList' db id
     = runSelectReturningOne
     $ select
     $ filter_ (\list -> _todoListId list ==. val_ id)
@@ -39,11 +67,18 @@ newtype MonadDBPostgres m a = MonadDBPostgres (m a)
 type PgConstr c m = (MonadIO m, MonadReader c m, HasPool P.Connection c)
 
 instance (PgConstr c m) => MonadUsers (MonadDBPostgres m) where
-    lookupByEmail id = asks getPool >>=
-        liftIO . flip runPool (lookupByEmailDB pgDb id :: Pg (Maybe User))
+    lookupByEmail email
+        = liftIO
+        . flip runPool (lookupByEmail' pgDb email :: Pg (Maybe User))
+      =<< asks getPool
+    lookupByID id
+        = fmap (fmap fromUser)
+        . liftIO
+        . flip runPool (lookupByID' pgDb id :: Pg (Maybe User))
+      =<< asks getPool
 instance (PgConstr c m) => MonadTodoLists (MonadDBPostgres m) where
     getList id = asks getPool >>=
-        liftIO . flip runPool (getListDB pgDb id :: Pg (Maybe TodoList))
+        liftIO . flip runPool (getList' pgDb id :: Pg (Maybe TodoList))
 
 newtype MonadDBSqlite m a = MonadDBSqlite (m a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
@@ -51,8 +86,15 @@ newtype MonadDBSqlite m a = MonadDBSqlite (m a)
 type SqConstr c m = (MonadIO m, MonadReader c m, HasPool S.Connection c)
 
 instance (SqConstr c m) => MonadUsers (MonadDBSqlite m) where
-    lookupByEmail id = asks getPool >>=
-        liftIO . flip runPool (lookupByEmailDB sqDb id :: SqliteM (Maybe User))
+    lookupByEmail email
+        = liftIO
+        . flip runPool (lookupByEmail' pgDb email :: SqliteM (Maybe User))
+      =<< asks getPool
+    lookupByID id
+        = fmap (fmap fromUser)
+        . liftIO
+        . flip runPool (lookupByID' pgDb id :: SqliteM (Maybe User))
+      =<< asks getPool
 instance (SqConstr c m) => MonadTodoLists (MonadDBSqlite m) where
     getList id = asks getPool >>=
-        liftIO . flip runPool (getListDB sqDb id :: SqliteM (Maybe TodoList))
+        liftIO . flip runPool (getList' sqDb id :: SqliteM (Maybe TodoList))

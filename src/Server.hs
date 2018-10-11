@@ -22,7 +22,7 @@ instance FromJSON Login
 type Protected = "users" :> UsersAPI
             :<|> "lists" :> TodoListAPI
 
-type UsersAPI = "get" :> Capture "email" Text :> Get '[JSON] (Maybe User)
+type UsersAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe DB.PublicUser)
 type TodoListAPI = "get" :> Capture "id" Int :> Get '[JSON] (Maybe TodoList)
 
 protected :: (Constr conn m)
@@ -32,9 +32,9 @@ protected :: (Constr conn m)
 protected config (Authenticated _) =
     hoistServer (Proxy :: Proxy Protected) (_runHandler config) server
   where
-    userServer = DB.lookupByEmail
-    listServer = DB.getList
-    server = userServer :<|> listServer
+    usersApi = DB.lookupByID
+    listsApi = DB.getList
+    server = usersApi :<|> listsApi
 protected _ _ = throwAll err401
 
 type Unprotected
@@ -58,7 +58,7 @@ checkCreds :: (Constr conn m)
                                 ]
                                 NoContent)
 checkCreds cfg (Login email password) =
-    maybe (throwError err401) return =<< checkCreds
+    checkCreds >>= maybe (throwError err401) return
   where
     lookupEmail cfg = _runHandler cfg . DB.lookupByEmail
     checkLogin cfg = liftIO . acceptLogin (_cookie cfg) (_jwt cfg)
