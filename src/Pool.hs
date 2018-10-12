@@ -7,6 +7,7 @@ import Crypto.BCrypt
 import Data.List (intercalate)
 import Data.Maybe (catMaybes)
 import Data.Pool
+import Data.Proxy (Proxy (Proxy))
 import Data.Text.Encoding (decodeUtf8)
 import Database.Beam
 import Database.Beam.Migrate.Simple (runSimpleMigration, simpleMigration)
@@ -33,12 +34,14 @@ mkPoolPg :: Environment -> IO (Pool P.Connection)
 mkPoolPg env = do
     pool <- createPool (connect env) P.close (numPools env) 1 2
     withResource pool $ \conn ->
-        simpleMigration PM.migrationBackend conn pgCheckedDb >>=
+        simpleMigration PM.migrationBackend conn (checkedDb syntax) >>=
             handleMigrations (runSimpleMigration @PgCommandSyntax
                                                  @Postgres @_ @Pg
                                                  conn)
     return pool
   where
+    syntax = Proxy :: Proxy PgCommandSyntax
+
     connect Test = P.connectPostgreSQL "host=localhost dbname=todohs_test"
     connect Development =
         P.connectPostgreSQL "host=localhost dbname=todohs_dev"
@@ -65,18 +68,20 @@ mkPoolSq :: Environment -> IO (Pool S.Connection)
 mkPoolSq env = do
     pool <- createPool (S.open (filename env)) S.close (numPools env) 1 2
     withResource pool $ \conn ->
-        simpleMigration SM.migrationBackend conn sqCheckedDb >>=
+        simpleMigration SM.migrationBackend conn (checkedDb syntax) >>=
             handleMigrations (runSimpleMigration @SqliteCommandSyntax
                                                  @Sqlite @_ @SqliteM
                                                  conn)
     -- TODO(DarinM223): remove this once registration is implemented.
-    runPool pool insertOchako
+    runPool pool $ insertOchako syntax
     return pool
   where
-    insertOchako :: SqliteM ()
-    insertOchako = void $ runMaybeT $ do
+    syntax = Proxy :: Proxy SqliteCommandSyntax
+
+    insertOchako :: (MigrateSyntax syntax) => Proxy syntax -> SqliteM ()
+    insertOchako syntax = void $ runMaybeT $ do
         pass <- liftIO (hashedPass "deku") >>= MaybeT . pure
-        lift $ runInsert $ insert (_todoListUsers sqDb)
+        lift $ runInsert $ insert (_todoListUsers (db syntax))
                          $ insertValues [ochako pass]
       where
         hashedPass pass =

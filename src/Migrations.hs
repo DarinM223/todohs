@@ -1,9 +1,8 @@
 module Migrations where
 
+import Data.Proxy (Proxy)
 import Database.Beam
 import Database.Beam.Migrate
-import Database.Beam.Postgres
-import Database.Beam.Sqlite
 import Models
 
 -- :(
@@ -36,26 +35,18 @@ migration = do
                   (TodoListId (field "parent_list" int notNull))
     return $ TodoListDb users lists todos
 
-type Migration' syntax be db = Migration syntax (CheckedDatabaseSettings be db)
+migrations :: forall syntax be. (MigrateSyntax syntax)
+           => MigrationSteps syntax
+                             ()
+                             (CheckedDatabaseSettings be TodoListDb)
+migrations = migrationStep "Initial commit" (const migration)
 
-migrationsSq :: MigrationSteps SqliteCommandSyntax
-                               ()
-                               (CheckedDatabaseSettings be TodoListDb)
-migrationsSq = migrationStep "Initial commit" (const migration)
+checkedDb :: forall syntax be. (MigrateSyntax syntax)
+          => Proxy syntax
+          -> CheckedDatabaseSettings be TodoListDb
+checkedDb _ = evaluateDatabase (migrations @syntax)
 
-migrationsPg :: MigrationSteps PgCommandSyntax
-                               ()
-                               (CheckedDatabaseSettings be TodoListDb)
-migrationsPg = migrationStep "Initial commit" (const migration)
-
-pgCheckedDb :: CheckedDatabaseSettings be TodoListDb
-pgCheckedDb = evaluateDatabase migrationsPg
-
-sqCheckedDb :: CheckedDatabaseSettings be TodoListDb
-sqCheckedDb = evaluateDatabase migrationsSq
-
-pgDb :: DatabaseSettings be TodoListDb
-pgDb = unCheckDatabase pgCheckedDb
-
-sqDb :: DatabaseSettings be TodoListDb
-sqDb = unCheckDatabase sqCheckedDb
+db :: forall syntax be. (MigrateSyntax syntax)
+   => Proxy syntax
+   -> DatabaseSettings be TodoListDb
+db = unCheckDatabase . checkedDb
